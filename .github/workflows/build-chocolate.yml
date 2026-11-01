@@ -1,0 +1,58 @@
+name: Build Chocolate Firmware
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build bread-compact-wifi (16MB)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 写入本机配置
+        shell: bash
+        run: |
+          cat >> sdkconfig.defaults.esp32s3 <<'EOF'
+
+          CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI=y
+          CONFIG_OLED_SSD1306_128X64=y
+          CONFIG_LANGUAGE_ZH_CN=y
+          CONFIG_USE_CUSTOM_WAKE_WORD=y
+          CONFIG_CUSTOM_WAKE_WORD="qiao ke li"
+          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="巧克力"
+          CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20
+          CONFIG_OTA_URL="http://192.168.3.250:8003/xiaozhi/ota/"
+          EOF
+
+      - name: 编译
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" set-target esp32s3
+          idf.py build
+          idf.py merge-bin -o xiaozhi-chocolate-16m.bin
+
+      - name: 关键配置自检
+        shell: bash
+        run: |
+          grep -q 'CONFIG_OTA_URL="http://192.168.3.250:8003/xiaozhi/ota/"' sdkconfig
+          grep -q 'CONFIG_CUSTOM_WAKE_WORD="qiao ke li"' sdkconfig
+          grep -q 'CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y' sdkconfig
+          echo "✅ 配置均已写入"
+
+      - name: 上传固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhi-chocolate-16m
+          path: |
+            build/xiaozhi-chocolate-16m.bin
+            build/xiaozhi.bin
+          retention-days: 30
