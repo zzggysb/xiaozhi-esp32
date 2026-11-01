@@ -1,5 +1,8 @@
 name: Build Chocolate Firmware
 
+# 只编一块板：ESP32-S3 N16R8 面包板方案 + 唤醒词「巧克力」+ 指向家里 NAS
+# 用法：仓库 Actions 页面 → 左侧 Build Chocolate Firmware → Run workflow
+
 on:
   workflow_dispatch:
 
@@ -22,6 +25,7 @@ jobs:
         run: |
           cat >> sdkconfig.defaults.esp32s3 <<'EOF'
 
+          # ==== 巧克力专用配置 ====
           CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI=y
           CONFIG_OLED_SSD1306_128X64=y
           CONFIG_LANGUAGE_ZH_CN=y
@@ -31,6 +35,8 @@ jobs:
           CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20
           CONFIG_OTA_URL="http://192.168.3.250:8003/xiaozhi/ota/"
           EOF
+          echo "---- 追加后的配置 ----"
+          tail -12 sdkconfig.defaults.esp32s3
 
       - name: 编译
         shell: bash
@@ -39,14 +45,15 @@ jobs:
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" set-target esp32s3
           idf.py build
           idf.py merge-bin -o xiaozhi-chocolate-16m.bin
+          ls -lh xiaozhi-chocolate-16m.bin build/xiaozhi.bin
 
-      - name: 关键配置自检
+      - name: 关键配置自检（失败就别用了）
         shell: bash
         run: |
           grep -q 'CONFIG_OTA_URL="http://192.168.3.250:8003/xiaozhi/ota/"' sdkconfig
           grep -q 'CONFIG_CUSTOM_WAKE_WORD="qiao ke li"' sdkconfig
           grep -q 'CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y' sdkconfig
-          echo "✅ 配置均已写入"
+          echo "✅ 唤醒词 / OTA 地址 / 16MB Flash 均已写入"
 
       - name: 上传固件
         uses: actions/upload-artifact@v4
