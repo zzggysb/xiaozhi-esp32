@@ -46,7 +46,8 @@ jobs:
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" set-target esp32s3
           idf.py build
           idf.py merge-bin -o xiaozhi-chocolate-16m.bin
-          ls -lh xiaozhi-chocolate-16m.bin build/xiaozhi.bin
+          # merge-bin 输出在 build/ 目录下，不在项目根目录
+          ls -lh build/xiaozhi-chocolate-16m.bin build/xiaozhi.bin
 
       - name: 关键配置自检（失败就别用了）
         shell: bash
