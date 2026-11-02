@@ -1,4 +1,5 @@
 #include "application.h"
+#include "alarm/alarm_manager.h"
 #include "assets.h"
 #include "assets/lang_config.h"
 #include "audio_codec.h"
@@ -803,6 +804,11 @@ void Application::StartListening() { xEventGroupSetBits(event_group_, MAIN_EVENT
 void Application::StopListening() { xEventGroupSetBits(event_group_, MAIN_EVENT_STOP_LISTENING); }
 
 void Application::HandleToggleChatEvent() {
+    // 按键 = 用户想操作设备，先把正在响的闹钟停掉
+    if (AlarmManager::GetInstance().IsRinging()) {
+        AlarmManager::GetInstance().StopRinging("button");
+    }
+
     auto state = GetDeviceState();
 
     if (state == kDeviceStateNotifying) {
@@ -920,6 +926,11 @@ void Application::HandleStopListeningEvent() {
 }
 
 void Application::HandleWakeWordDetectedEvent() {
+    // 喊唤醒词多半就是要它闭嘴（闹钟响了说"巧克力"），先停铃再处理别的
+    if (AlarmManager::GetInstance().IsRinging()) {
+        AlarmManager::GetInstance().StopRinging("wake_word");
+    }
+
     if (!protocol_) {
         return;
     }
