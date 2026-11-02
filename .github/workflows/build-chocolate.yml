@@ -39,6 +39,17 @@ jobs:
           echo "---- 追加后的配置 ----"
           tail -12 sdkconfig.defaults.esp32s3
 
+      - name: 校验本地补丁已同步（闹钟模块）
+        shell: bash
+        run: |
+          # 这几项缺失说明 github_build.py 的同步步骤没生效，直接失败，别白等编译
+          test -f main/alarm/alarm_manager.cc || { echo "❌ 缺少 main/alarm/alarm_manager.cc"; exit 1; }
+          test -f main/alarm/alarm_manager.h || { echo "❌ 缺少 main/alarm/alarm_manager.h"; exit 1; }
+          grep -q 'alarm/alarm_manager.cc' main/CMakeLists.txt || { echo "❌ CMakeLists 没登记闹钟源文件"; exit 1; }
+          grep -q 'self.alarm.set' main/boards/bread-compact-wifi/compact_wifi_board.cc || { echo "❌ 板级未注册闹钟工具"; exit 1; }
+          grep -q 'AlarmManager' main/application.cc || { echo "❌ application.cc 未接入响铃停止逻辑"; exit 1; }
+          echo "✅ 闹钟/提醒/倒计时模块已就位"
+
       - name: 编译
         shell: bash
         run: |
