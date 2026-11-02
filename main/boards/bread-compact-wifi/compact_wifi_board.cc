@@ -1,4 +1,5 @@
 #include "wifi_board.h"
+#include "alarm/alarm_manager.h"
 #include "codecs/no_audio_codec.h"
 #include "display/oled_display.h"
 #include "system_reset.h"
@@ -150,6 +151,104 @@ private:
     // 物联网初始化，逐步迁移到 MCP 协议
     void InitializeTools() {
         static LampController lamp(LAMP_GPIO);
+        InitializeAlarmTools();
+    }
+
+    // 闹钟 / 提醒 / 倒计时：设备本地调度，不依赖联网，掉电不丢
+    void InitializeAlarmTools() {
+        auto& alarm = AlarmManager::GetInstance();
+        alarm.Initialize();
+        auto& mcp = McpServer::GetInstance();
+
+        mcp.AddTool("self.alarm.set",
+                    "设置闹钟。用户说\"几点叫我\"\"定个闹钟\"\"每天早上 6 点叫我\"时调用。"
+                    "hour/minute 是本地时间；repeat=daily 每天重复，repeat=once 只响一次；"
+                    "day_offset 表示几天后（0=今天，1=明天），今日已过的时间自动顺延。",
+                    PropertyList({
+                        Property("hour", kPropertyTypeInteger, 0, 23),
+                        Property("minute", kPropertyTypeInteger, 0, 59),
+                        Property("repeat", kPropertyTypeString, std::string("daily")),
+                        Property("day_offset", kPropertyTypeInteger, 0),
+                        Property("label", kPropertyTypeString, std::string("")),
+                    }),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        const int hour = properties["hour"].value<int>();
+                        const int minute = properties["minute"].value<int>();
+                        const std::string repeat = properties["repeat"].value<std::string>();
+                        const int day_offset = properties["day_offset"].value<int>();
+                        const std::string label = properties["label"].value<std::string>();
+                        const bool daily = (repeat != "once");
+                        std::string error;
+                        if (!alarm.AddAlarm(hour, minute, daily, day_offset, label, error)) {
+                            return std::unexpected(error);
+                        }
+                        return alarm.DescribeAll();
+                    });
+
+        mcp.AddTool("self.alarm.list",
+                    "列出所有闹钟、提醒、倒计时，并返回设备当前时间。"
+                    "回答\"设了什么\"\"还有多久\"\"现在几点\"前必须调用。",
+                    PropertyList(),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        (void)properties;
+                        return alarm.DescribeAll();
+                    });
+
+        mcp.AddTool("self.alarm.cancel",
+                    "取消闹钟/提醒/倒计时。id 为编号，0 表示全部取消。",
+                    PropertyList({Property("id", kPropertyTypeInteger, 0)}),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        const int id = properties["id"].value<int>();
+                        std::string error;
+                        if (!alarm.Cancel(id, error)) {
+                            return std::unexpected(error);
+                        }
+                        return alarm.DescribeAll();
+                    });
+
+        mcp.AddTool("self.alarm.stop",
+                    "立即停止正在响的铃声。用户说\"别响了\"\"关掉闹钟\"时调用。",
+                    PropertyList(),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        (void)properties;
+                        if (!alarm.IsRinging()) {
+                            return std::string("{\"ringing\":false}");
+                        }
+                        alarm.StopRinging("tool");
+                        return std::string("{\"ringing\":false,\"stopped\":true}");
+                    });
+
+        mcp.AddTool("self.reminder.set",
+                    "一次性提醒，minutes 分钟后响。用户说\"N 分钟后提醒我\"时调用。",
+                    PropertyList({
+                        Property("minutes", kPropertyTypeInteger, 1, 1440),
+                        Property("label", kPropertyTypeString, std::string("")),
+                    }),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        const int minutes = properties["minutes"].value<int>();
+                        const std::string label = properties["label"].value<std::string>();
+                        std::string error;
+                        if (!alarm.AddReminder(minutes, label, error)) {
+                            return std::unexpected(error);
+                        }
+                        return alarm.DescribeAll();
+                    });
+
+        mcp.AddTool("self.timer.set",
+                    "设置倒计时，seconds 秒后响。用户说\"倒计时 N 分钟\"时用，分钟换算成秒。",
+                    PropertyList({
+                        Property("seconds", kPropertyTypeInteger, 1, 86400),
+                        Property("label", kPropertyTypeString, std::string("")),
+                    }),
+                    [&alarm](const PropertyList& properties) -> ToolResult {
+                        const int seconds = properties["seconds"].value<int>();
+                        const std::string label = properties["label"].value<std::string>();
+                        std::string error;
+                        if (!alarm.AddTimer(seconds, label, error)) {
+                            return std::unexpected(error);
+                        }
+                        return alarm.DescribeAll();
+                    });
     }
 
 public:
